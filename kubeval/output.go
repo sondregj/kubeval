@@ -23,9 +23,10 @@ type outputManager interface {
 }
 
 const (
-	outputSTD  = "stdout"
-	outputJSON = "json"
-	outputTAP  = "tap"
+	outputSTD    = "stdout"
+	outputJSON   = "json"
+	outputTAP    = "tap"
+	outputGitHub = "github"
 )
 
 func validOutputs() []string {
@@ -33,6 +34,7 @@ func validOutputs() []string {
 		outputSTD,
 		outputJSON,
 		outputTAP,
+		outputGitHub,
 	}
 }
 
@@ -44,6 +46,8 @@ func GetOutputManager(outFmt string) outputManager {
 		return newDefaultJSONOutputManager()
 	case outputTAP:
 		return newDefaultTAPOutputManager()
+	case outputGitHub:
+		return newDefaultGitHubOutputManager()
 	default:
 		return newSTDOutputManager()
 	}
@@ -236,5 +240,48 @@ func (j *tapOutputManager) Flush() error {
 			}
 		}
 	}
+	return nil
+}
+
+type gitHubOutputManager struct {
+	logger *log.Logger
+}
+
+func newDefaultGitHubOutputManager() *gitHubOutputManager {
+	return newGitHubOutputManager(log.New(os.Stdout, "", 0))
+}
+
+func newGitHubOutputManager(l *log.Logger) *gitHubOutputManager {
+	return &gitHubOutputManager{
+		logger: l,
+	}
+}
+
+func (g *gitHubOutputManager) Put(r ValidationResult) error {
+	if r.Kind == "" {
+		return nil
+	}
+
+	// TODO: Should we use %q or %s for the filename?
+
+	// TODO: Add group for each?
+	// https://docs.github.com/en/actions/using-workflows/workflow-commands-for-github-actions#grouping-log-lines
+
+	if !r.ValidatedAgainstSchema {
+		g.logger.Printf("::warning file=%q::%s (%s) was not validated against a schema", r.FileName, r.VersionKind(), r.QualifiedName())
+		return nil
+	}
+
+	for _, e := range r.Errors {
+		// TODO: Would be nice to have line position as well.
+		// TODO: Should errors be in a single or multiple entries?
+		g.logger.Printf("::error file=%q::%s", r.FileName, e.String())
+	}
+
+	return nil
+}
+
+func (g *gitHubOutputManager) Flush() error {
+	// no-op
 	return nil
 }
