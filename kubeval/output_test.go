@@ -201,3 +201,83 @@ ok 1 - deployment.yaml (Deployment) # SKIP
 		})
 	}
 }
+
+func Test_gitHubOutputManager_put(t *testing.T) {
+	type args struct {
+		vr ValidationResult
+	}
+
+	tests := []struct {
+		msg    string
+		args   args
+		exp    string
+		expErr error
+	}{
+		{
+			msg: "empty input",
+			args: args{
+				vr: ValidationResult{},
+			},
+			exp: "", // no output
+		},
+		{
+			msg: "file with no errors",
+			args: args{
+				vr: ValidationResult{
+					FileName:               "deployment.yaml",
+					Kind:                   "Deployment",
+					ValidatedAgainstSchema: true,
+					Errors:                 nil,
+				},
+			},
+			exp: "", // no output
+		},
+		{
+			msg: "file with errors",
+			args: args{
+				vr: ValidationResult{
+					FileName:               "service.yaml",
+					Kind:                   "Service",
+					ValidatedAgainstSchema: true,
+					Errors: newResultErrors([]string{
+						"i am a error",
+						"i am another error",
+					}),
+				},
+			},
+			exp: "::error file=\"service.yaml\"::error: i am a error\n::error file=\"service.yaml\"::error: i am another error\n",
+		},
+		{
+			msg: "file with no errors because of a skip",
+			args: args{
+				vr: ValidationResult{
+					FileName:               "deployment.yaml",
+					Kind:                   "Deployment",
+					ValidatedAgainstSchema: false,
+					Errors:                 nil,
+				},
+			},
+			exp: "::warning file=\"deployment.yaml\"::/Deployment (unknown) was not validated against a schema\n",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.msg, func(t *testing.T) {
+			buf := new(bytes.Buffer)
+			s := newGitHubOutputManager(log.New(buf, "", 0))
+
+			// record results
+			err := s.Put(tt.args.vr)
+			if err != nil {
+				assert.Equal(t, tt.expErr, err)
+			}
+
+			// flush final buffer
+			err = s.Flush()
+			if err != nil {
+				assert.Equal(t, tt.expErr, err)
+			}
+
+			assert.Equal(t, tt.exp, buf.String())
+		})
+	}
+}
