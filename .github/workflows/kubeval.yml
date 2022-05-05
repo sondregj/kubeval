@@ -1,0 +1,18 @@
+name: Kubeval
+
+on:
+  push:
+    branches:
+      - test-action
+
+jobs:
+  kubeval:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions/setup-go@v3
+        with:
+          go-version: '^1.15'
+      - name: Run kubeval
+        run: |
+          go run . --ignore-missing-schemas --output github ./fixtures/*.yaml
